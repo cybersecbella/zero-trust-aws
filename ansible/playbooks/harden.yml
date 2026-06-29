@@ -1,0 +1,51 @@
+---
+- name: CIS Level 2 hardening — Ubuntu 22.04
+  hosts: ec2_ubuntu
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Snapshot instance tags for AI reviewer context
+      community.aws.ec2_instance_info:
+        filters:
+          "tag:Name": "{{ inventory_hostname }}"
+      register: instance_info
+      delegate_to: localhost
+
+    - name: Record SG IDs attached to this instance
+      set_fact:
+        instance_sg_ids: >-
+          {{ instance_info.instances[0].security_groups
+             | map(attribute='group_id') | list }}
+
+    - name: Capture pre-hardening SG rules
+      community.aws.ec2_security_group_info:
+        group_ids: "{{ instance_sg_ids }}"
+      register: sg_rules_before
+      delegate_to: localhost
+
+    - name: Write pre-run SG snapshot to control node
+      copy:
+        content: "{{ sg_rules_before | to_nice_json }}"
+        dest: "/tmp/sg_before_{{ inventory_hostname }}.json"
+      delegate_to: localhost
+
+  roles:
+    - role: cis_ubuntu22
+      tags: [cis, level2]
+
+  post_tasks:
+    - name: Capture post-hardening SG rules
+      community.aws.ec2_security_group_info:
+        group_ids: "{{ instance_sg_ids }}"
+      register: sg_rules_after
+      delegate_to: localhost
+
+    - name: Write post-run SG snapshot to control node
+      copy:
+        content: "{{ sg_rules_after | to_nice_json }}"
+        dest: "/tmp/sg_after_{{ inventory_hostname }}.json"
+      delegate_to: localhost
+
+    - name: Flush handlers before scan
+      meta: flush_handlers

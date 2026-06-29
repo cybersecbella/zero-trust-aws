@@ -1,0 +1,26 @@
+
+# Install with: pip install -r requirements.txt
+
+# ── AWS ───────────────────────────────────────────────────────────────────────
+boto3==1.34.144
+botocore==1.34.144          # must stay in sync with boto3
+
+# ── Anthropic (AI reviewer + gap analyzer) ───────────────────────────────────
+anthropic==0.30.1
+
+# ── Data analysis (Zeek log analyzer) ────────────────────────────────────────
+pandas==2.2.2
+scipy==1.13.1
+numpy==1.26.4               # pandas 2.2 requires <2.0
+
+# ── NDJSON output ────────────────────────────────────────────────────────────
+ndjson==0.3.1
+
+# ── CLI + config ─────────────────────────────────────────────────────────────
+python-dotenv==1.0.1        # load .env for local runs (never in CI)
+click==8.1.7                # used by gap_analyzer CLI
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.2.2
+pytest-cov==5.0.0
+moto[ec2,securityhub,sts]==5.0.11   # AWS service mocks for unit tests

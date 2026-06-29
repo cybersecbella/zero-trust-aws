@@ -1,0 +1,101 @@
+# =============================================================================
+# zero-trust-aws .gitignore
+# =============================================================================
+
+# ── Secrets and credentials ───────────────────────────────────────────────────
+.env
+*.env
+!.env.example
+.aws/
+aws-credentials
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.pyo
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.env/
+pyvenv.cfg
+
+# ── Test and coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+nosetests.xml
+test-results/
+
+# ── Tool output files ─────────────────────────────────────────────────────────
+# These are generated at runtime — never commit real findings
+findings.json
+test_findings.json
+scores.json
+test_scores.json
+test_scores_ai.json
+report.md
+test_report.md
+test_report_ai.md
+*.ndjson
+/tmp/sg_before.json
+/tmp/sg_after.json
+/tmp/review_findings.json
+
+# ── Ansible ───────────────────────────────────────────────────────────────────
+# Roles and collections are installed via requirements.yml — not committed
+roles/
+collections/
+*.retry
+
+# OpenSCAP scan reports — contain real host data, do not commit
+reports/
+
+# Ansible vault files if used
+*.vault
+vault-password
+
+# ── Zeek ─────────────────────────────────────────────────────────────────────
+# Real Zeek logs contain sensitive network data — never commit
+*.log
+!zeek/tests/fixtures/*.log    # fixture files are safe to commit
+
+# ── Editors and OS ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Node (for docx generation scripts) ───────────────────────────────────────
+node_modules/
+npm-debug.log*
+
+# ── Terraform (if used alongside) ────────────────────────────────────────────
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example

@@ -1,0 +1,227 @@
+# .github/workflows/audit.yml
+#
+# Runs the SG auditor daily against the real AWS account using OIDC
+# federated credentials — no long-lived secrets stored in GitHub.
+#
+# On findings: the workflow exits non-zero, GitHub sends a notification
+# email to repository watchers, and the run appears as failed in the
+# Actions tab.
+#
+# Prerequisites:
+#   1. Run scripts/setup_iam.sh with --github-org and --github-repo
+#      to create the OIDC provider and role.
+#   2. Add the following GitHub Actions secrets/variables:
+#        AWS_ROLE_ARN     (secret)  — arn:aws:iam::123456789012:role/ZeroTrustGitHubActionsRole
+#        AWS_REGION       (variable) — us-east-1
+#        AUDIT_PORTS      (variable) — 22 3389       (space-separated, optional)
+#        SLACK_WEBHOOK    (secret)   — https://hooks.slack.com/... (optional)
+#
+# Triggers:
+#   - Daily at 06:00 UTC
+#   - Manual dispatch (for ad-hoc runs or testing)
+#   - Push to main affecting auditor code (catches regressions immediately)
+
+name: Daily SG Audit
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC daily
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: "Space-separated list of regions to audit (leave blank for all)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Dry run — print findings but do not post to Security Hub"
+        required: false
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - "auditor/sg_auditor.py"
+      - ".github/workflows/audit.yml"
+
+permissions:
+  id-token: write    # required for OIDC token request
+  contents: read
+  # Uncomment if you want the workflow to create GitHub Issues on findings:
+  # issues: write
+
+concurrency:
+  group: audit-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a running audit
+
+jobs:
+  sg-audit:
+    name: Security Group Audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python setup ────────────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3 botocore
+
+      # ── AWS credentials via OIDC ─────────────────────────────────────────────
+      # No secrets stored in GitHub — OIDC issues a short-lived token that
+      # the role trusts. The token expires when the job finishes.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          role-session-name: GitHubActions-SGAudit-${{ github.run_id }}
+          role-duration-seconds: 1800   # 30 minutes — enough for any account size
+
+      - name: Verify credentials
+        run: aws sts get-caller-identity
+
+      # ── Build auditor arguments ──────────────────────────────────────────────
+      - name: Build audit arguments
+        id: args
+        run: |
+          ARGS="--output findings.json"
+
+          # Regions: manual dispatch input > env variable > all regions
+          if [[ -n "${{ github.event.inputs.regions }}" ]]; then
+            ARGS="$ARGS --regions ${{ github.event.inputs.regions }}"
+          fi
+
+          # Ports from variable (default: 22 3389)
+          PORTS="${{ vars.AUDIT_PORTS || '22 3389' }}"
+          ARGS="$ARGS --ports $PORTS"
+
+          # Dry run flag
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            ARGS="$ARGS --dry-run"
+          fi
+
+          echo "args=$ARGS" >> "$GITHUB_OUTPUT"
+          echo "Audit arguments: $ARGS"
+
+      # ── Run auditor ──────────────────────────────────────────────────────────
+      - name: Run SG auditor
+        id: audit
+        run: |
+          set +e   # don't exit on non-zero — we handle it below
+          python3 auditor/sg_auditor.py ${{ steps.args.outputs.args }}
+          EXIT_CODE=$?
+          echo "exit_code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
+
+          if [[ $EXIT_CODE -eq 0 ]]; then
+            echo "status=clean"   >> "$GITHUB_OUTPUT"
+            echo "finding_count=0" >> "$GITHUB_OUTPUT"
+          else
+            COUNT=$(python3 -c "
+          import json
+          try:
+              data = json.load(open('findings.json'))
+              print(len(data) if isinstance(data, list) else 0)
+          except Exception:
+              print('unknown')
+          ")
+            echo "status=findings"       >> "$GITHUB_OUTPUT"
+            echo "finding_count=$COUNT"  >> "$GITHUB_OUTPUT"
+          fi
+          set -e
+
+      # ── Upload findings artifact ─────────────────────────────────────────────
+      - name: Upload findings
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sg-audit-findings-${{ github.run_id }}
+          path: findings.json
+          retention-days: 90   # keep audit history for 3 months
+
+      # ── Summary in GitHub Actions UI ────────────────────────────────────────
+      - name: Write job summary
+        if: always()
+        run: |
+          {
+            echo "## SG Audit Results"
+            echo ""
+            echo "| Field | Value |"
+            echo "|-------|-------|"
+            echo "| Status | ${{ steps.audit.outputs.status }} |"
+            echo "| Findings | ${{ steps.audit.outputs.finding_count }} |"
+            echo "| Region | ${{ vars.AWS_REGION || 'us-east-1' }} |"
+            echo "| Run | [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |"
+
+            if [[ "${{ steps.audit.outputs.status }}" == "findings" ]]; then
+              echo ""
+              echo "### ⚠️ Findings"
+              echo ""
+              echo '```json'
+              python3 -c "
+          import json
+          try:
+              data = json.load(open('findings.json'))
+              # Show first 5 findings in summary
+              for f in (data if isinstance(data, list) else [])[:5]:
+                  print(json.dumps({
+                      'id': f.get('Id',''),
+                      'title': f.get('Title',''),
+                      'severity': f.get('Severity',{}).get('Label',''),
+                      'region': f.get('Region',''),
+                  }, indent=2))
+          except Exception as e:
+              print(f'Could not parse findings: {e}')
+          "
+              echo '```'
+              echo ""
+              echo "> Full findings uploaded as artifact: sg-audit-findings-${{ github.run_id }}"
+            else
+              echo ""
+              echo "### ✅ No findings — account is clean."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Optional Slack notification on findings ──────────────────────────────
+      - name: Notify Slack on findings
+        if: |
+          steps.audit.outputs.status == 'findings' &&
+          secrets.SLACK_WEBHOOK != ''
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          payload: |
+            {
+              "text": "🚨 *SG Audit: ${{ steps.audit.outputs.finding_count }} finding(s) detected*",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🚨 *Security Group Audit Findings*\n${{ steps.audit.outputs.finding_count }} overly-permissive Security Group(s) detected in `${{ vars.AWS_REGION || 'us-east-1' }}`.\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+      # ── Fail the workflow if findings exist ──────────────────────────────────
+      # This triggers GitHub's built-in email notifications to repo watchers.
+      # The Security Hub findings are already posted — this just makes the
+      # workflow visible as "failed" in the Actions tab.
+      - name: Fail on findings
+        if: steps.audit.outputs.status == 'findings'
+        run: |
+          echo "::error::${{ steps.audit.outputs.finding_count }} Security Group finding(s) detected."
+          echo "::error::Check Security Hub in the AWS console for details."
+          echo "::error::Download the findings artifact for the full ASFF payload."
+          exit 1

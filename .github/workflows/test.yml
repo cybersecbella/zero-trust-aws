@@ -1,0 +1,132 @@
+# .github/workflows/test.yml
+#
+# Runs the full pytest suite on every pull request and push to main.
+# No real AWS credentials required — all boto3 calls are mocked by moto.
+# No Anthropic API key required — the client is stubbed in every test.
+#
+# Triggers:
+#   - Pull requests targeting main
+#   - Pushes to main
+#   - Manual dispatch (workflow_dispatch)
+
+name: Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python setup ────────────────────────────────────────────────────────
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # ── Lint ────────────────────────────────────────────────────────────────
+      - name: Syntax check — all Python files
+        run: |
+          python -m py_compile \
+            auditor/sg_auditor.py \
+            reviewer/sg_diff.py \
+            zeek/analyzer.py \
+            zeek/detections/lateral_movement.py \
+            zeek/detections/data_staging.py \
+            zeek/detections/dns_entropy.py \
+            gap_analyzer/nist_800_207.py \
+            gap_analyzer/controls/aws_controls_map.py
+          echo "Syntax OK"
+
+      # ── Unit tests ───────────────────────────────────────────────────────────
+      - name: Test — SG auditor
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+        run: |
+          pytest auditor/tests/test_sg_auditor.py \
+            -v --tb=short \
+            --cov=auditor/sg_auditor \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+      - name: Test — AI rule reviewer
+        run: |
+          pytest reviewer/tests/test_sg_diff.py \
+            -v --tb=short \
+            --cov=reviewer/sg_diff \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+      - name: Test — Zeek log analyzer
+        run: |
+          pytest zeek/tests/test_analyzer.py \
+            -v --tb=short \
+            --cov=zeek \
+            --cov-report=term-missing \
+            --cov-fail-under=75
+
+      - name: Test — Gap analyzer
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+        run: |
+          pytest gap_analyzer/tests/test_gap_analyzer.py \
+            -v --tb=short \
+            --cov=gap_analyzer \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+      # ── Combined coverage report ─────────────────────────────────────────────
+      - name: Combined coverage report
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+        run: |
+          pytest \
+            auditor/tests/ \
+            reviewer/tests/ \
+            zeek/tests/ \
+            gap_analyzer/tests/ \
+            --tb=short \
+            --cov=auditor \
+            --cov=reviewer \
+            --cov=zeek \
+            --cov=gap_analyzer \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            -q
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 7

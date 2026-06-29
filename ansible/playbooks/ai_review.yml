@@ -1,0 +1,22 @@
+---
+- name: AI firewall rule review
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+    - name: Run AI rule reviewer for each instance
+      command: >
+        python3 scripts/sg_diff.py
+          --before /tmp/sg_before_{{ item }}.json
+          --after  /tmp/sg_after_{{ item }}.json
+          --instance {{ item }}
+          --role "{{ hostvars[item]['instance_info']
+                      .instances[0].tags.Role | default('unknown') }}"
+      loop: "{{ groups['ec2_ubuntu'] }}"
+      register: review_results
+
+    - name: Fail the play if any critical findings
+      fail:
+        msg: "Critical SG finding on {{ item.item }}: {{ item.stdout }}"
+      when: "'\"severity\": \"critical\"' in item.stdout"
+      loop: "{{ review_results.results }}"

@@ -1,0 +1,38 @@
+---
+- name: Pre-hardening OpenSCAP scan
+  hosts: ec2_ubuntu
+  become: true
+
+  tasks:
+    - name: Install OpenSCAP scanner
+      apt:
+        name:
+          - libopenscap8
+          - openscap-scanner
+        state: present
+        update_cache: true
+
+    - name: Download Ubuntu 22 SCAP content
+      get_url:
+        url: >-
+          https://security-metadata.canonical.com/oval/
+          com.ubuntu.jammy.usn.oval.xml.bz2
+        dest: /tmp/ubuntu22-oval.xml.bz2
+
+    - name: Decompress SCAP content
+      command: bunzip2 -f /tmp/ubuntu22-oval.xml.bz2
+
+    - name: Run pre-hardening scan
+      command: >
+        oscap oval eval
+          --results /tmp/oscap_pre_results.xml
+          --report  /tmp/oscap_pre_report.html
+          /tmp/ubuntu22-oval.xml
+      register: oscap_pre
+      failed_when: false   # oscap returns non-zero on findings
+
+    - name: Fetch pre-scan report to control node
+      fetch:
+        src: /tmp/oscap_pre_report.html
+        dest: "reports/pre/{{ inventory_hostname }}_oscap_pre.html"
+        flat: true

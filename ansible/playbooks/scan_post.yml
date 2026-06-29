@@ -1,0 +1,221 @@
+---
+# ansible/playbooks/scan_post.yml
+#
+# Post-hardening OpenSCAP scan. Runs after harden.yml completes.
+# Fetches the HTML report and XML results to the control node, then
+# compares pass/fail counts against the pre-scan baseline.
+#
+# Artifacts written to control node:
+#   reports/post/<hostname>_oscap_post.html
+#   reports/post/<hostname>_oscap_post.xml
+#   reports/diff/<hostname>_oscap_diff.txt
+
+- name: Post-hardening OpenSCAP scan
+  hosts: ec2_ubuntu
+  become: true
+  gather_facts: false
+
+  vars:
+    oscap_content:  /tmp/ubuntu22-oval.xml
+    oscap_results:  /tmp/oscap_post_results.xml
+    oscap_report:   /tmp/oscap_post_report.html
+    pre_results:    /tmp/oscap_pre_results.xml   # written by scan_pre.yml
+    score_threshold: 85                           # fail play if score < this
+
+  tasks:
+
+    # ── Verify pre-scan results exist ────────────────────────────────────────
+
+    - name: Check pre-scan XML exists on target
+      stat:
+        path: "{{ pre_results }}"
+      register: pre_scan_stat
+
+    - name: Warn if pre-scan results are missing
+      debug:
+        msg: >
+          Pre-scan results not found at {{ pre_results }}.
+          Diff report will be skipped. Run scan_pre.yml before harden.yml.
+      when: not pre_scan_stat.stat.exists
+
+    # ── Run post-hardening scan ───────────────────────────────────────────────
+
+    - name: Verify SCAP content is present
+      stat:
+        path: "{{ oscap_content }}"
+      register: scap_content_stat
+
+    - name: Fail if SCAP content missing
+      fail:
+        msg: >
+          SCAP content not found at {{ oscap_content }}.
+          Re-run scan_pre.yml to download it, or run site.yml from the top.
+      when: not scap_content_stat.stat.exists
+
+    - name: Run post-hardening OpenSCAP scan
+      command: >
+        oscap oval eval
+          --results {{ oscap_results }}
+          --report  {{ oscap_report }}
+          {{ oscap_content }}
+      register: oscap_post
+      changed_when: false
+      failed_when: oscap_post.rc > 2   # rc=1 means findings exist (expected)
+
+    # ── Parse pass/fail counts from XML ─────────────────────────────────────
+
+    - name: Extract post-scan pass count
+      shell: >
+        grep -c 'result>true<' {{ oscap_results }} || true
+      register: post_pass
+      changed_when: false
+
+    - name: Extract post-scan fail count
+      shell: >
+        grep -c 'result>false<' {{ oscap_results }} || true
+      register: post_fail
+      changed_when: false
+
+    - name: Extract pre-scan pass count
+      shell: >
+        grep -c 'result>true<' {{ pre_results }} || true
+      register: pre_pass
+      changed_when: false
+      when: pre_scan_stat.stat.exists
+
+    - name: Extract pre-scan fail count
+      shell: >
+        grep -c 'result>false<' {{ pre_results }} || true
+      register: pre_fail
+      changed_when: false
+      when: pre_scan_stat.stat.exists
+
+    - name: Compute score percentage
+      set_fact:
+        post_pass_int: "{{ post_pass.stdout | int }}"
+        post_fail_int: "{{ post_fail.stdout | int }}"
+        post_total:    "{{ (post_pass.stdout | int) + (post_fail.stdout | int) }}"
+        post_score:    >-
+          {{ ((post_pass.stdout | int) /
+              ((post_pass.stdout | int) + (post_fail.stdout | int)) * 100)
+             | round(1) }}
+
+    - name: Print scan summary
+      debug:
+        msg: |
+          ── Post-hardening scan results for {{ inventory_hostname }} ──
+          Pass:   {{ post_pass_int }}
+          Fail:   {{ post_fail_int }}
+          Total:  {{ post_total }}
+          Score:  {{ post_score }}%
+          Threshold: {{ score_threshold }}%
+
+    - name: Fail play if score is below threshold
+      fail:
+        msg: >
+          {{ inventory_hostname }} scored {{ post_score }}% —
+          below the required {{ score_threshold }}%.
+          Review the HTML report at reports/post/{{ inventory_hostname }}_oscap_post.html.
+      when: post_score | float < score_threshold | float
+
+    # ── Fetch reports to control node ────────────────────────────────────────
+
+    - name: Ensure local report directories exist
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - reports/post
+        - reports/diff
+      delegate_to: localhost
+      run_once: true
+
+    - name: Fetch post-scan HTML report
+      fetch:
+        src:  "{{ oscap_report }}"
+        dest: "reports/post/{{ inventory_hostname }}_oscap_post.html"
+        flat: true
+
+    - name: Fetch post-scan XML results
+      fetch:
+        src:  "{{ oscap_results }}"
+        dest: "reports/post/{{ inventory_hostname }}_oscap_post.xml"
+        flat: true
+
+    # ── Diff pre vs post on control node ─────────────────────────────────────
+
+    - name: Generate diff report
+      shell: |
+        python3 - <<'EOF'
+        import xml.etree.ElementTree as ET
+
+        NS = "http://oval.mitre.org/XMLSchema/oval-results-5"
+
+        def parse_results(path):
+            tree = ET.parse(path)
+            root = tree.getroot()
+            results = {}
+            for r in root.iter(f"{{{NS}}}definition"):
+                def_id = r.get("definition_id", "")
+                result  = r.get("result", "")
+                results[def_id] = result
+            return results
+
+        pre  = parse_results("reports/pre/{{ inventory_hostname }}_oscap_pre.xml")
+        post = parse_results("reports/post/{{ inventory_hostname }}_oscap_post.xml")
+
+        newly_passing = [d for d in post if post[d] == "true"  and pre.get(d) != "true"]
+        still_failing = [d for d in post if post[d] == "false" and pre.get(d) == "false"]
+        regressions   = [d for d in post if post[d] == "false" and pre.get(d) == "true"]
+
+        lines = [
+            "OpenSCAP diff: {{ inventory_hostname }}",
+            f"  Newly passing : {len(newly_passing)}",
+            f"  Still failing : {len(still_failing)}",
+            f"  Regressions   : {len(regressions)}",
+            "",
+        ]
+        if regressions:
+            lines.append("REGRESSIONS (were passing before hardening):")
+            lines.extend(f"  {d}" for d in sorted(regressions))
+        if still_failing:
+            lines.append("STILL FAILING:")
+            lines.extend(f"  {d}" for d in sorted(still_failing)[:20])
+            if len(still_failing) > 20:
+                lines.append(f"  ... and {len(still_failing) - 20} more")
+
+        print("\n".join(lines))
+        EOF
+      register: diff_output
+      delegate_to: localhost
+      when: pre_scan_stat.stat.exists
+      changed_when: false
+
+    - name: Write diff report to file
+      copy:
+        content: "{{ diff_output.stdout }}"
+        dest: "reports/diff/{{ inventory_hostname }}_oscap_diff.txt"
+      delegate_to: localhost
+      when:
+        - pre_scan_stat.stat.exists
+        - diff_output.stdout is defined
+
+    - name: Print diff summary
+      debug:
+        msg: "{{ diff_output.stdout_lines }}"
+      when:
+        - pre_scan_stat.stat.exists
+        - diff_output.stdout is defined
+
+    # ── Fail hard on regressions ─────────────────────────────────────────────
+
+    - name: Fail if hardening introduced regressions
+      fail:
+        msg: >
+          Hardening introduced regressions on {{ inventory_hostname }}.
+          Check reports/diff/{{ inventory_hostname }}_oscap_diff.txt for details.
+      when:
+        - pre_scan_stat.stat.exists
+        - diff_output.stdout is defined
+        - "'REGRESSIONS' in diff_output.stdout"

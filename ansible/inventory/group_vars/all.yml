@@ -1,0 +1,41 @@
+---
+# --- Level selection ---
+cis_level: 2
+
+# --- SSH hardening (5.2.x) ---
+# Level 2 sets MaxAuthTries 4, LoginGraceTime 60, etc.
+# Override below if your bastion needs different values.
+cis_sshd_max_auth_tries: 4
+cis_sshd_login_grace_time: 60
+cis_sshd_client_alive_interval: 300
+cis_sshd_client_alive_count_max: 0
+
+# --- Filesystem controls ---
+# 1.1.x — disable unused filesystems
+cis_disable_cramfs: true
+cis_disable_freevxfs: true
+cis_disable_jffs2: true
+cis_disable_hfs: true
+cis_disable_hfsplus: true
+cis_disable_udf: true   # set false if you use DVDs
+
+# --- Audit daemon (4.x) ---
+cis_auditd_max_log_file: 8
+cis_auditd_max_log_file_action: keep_logs
+cis_auditd_space_left_action: email
+cis_auditd_action_mail_acct: root
+
+# --- Password policy (5.4.x) ---
+cis_pass_max_days: 365
+cis_pass_min_days: 1
+cis_pass_warn_age: 7
+cis_pwquality_minlen: 14
+cis_pwquality_dcredit: -1
+cis_pwquality_ucredit: -1
+cis_pwquality_ocredit: -1
+cis_pwquality_lcredit: -1
+
+# --- Rules to skip (document your reasons) ---
+cis_rule_skip_list:
+  - "1.1.1.1"   # cramfs — needed for legacy kernel module loading in our AMI
+  - "3.3.2"     # IPv6 disable — we use IPv6 in this VPC

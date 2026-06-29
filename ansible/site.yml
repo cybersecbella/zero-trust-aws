@@ -1,0 +1,5 @@
+---
+- import_playbook: playbooks/scan_pre.yml
+- import_playbook: playbooks/harden.yml
+- import_playbook: playbooks/scan_post.yml
+- import_playbook: playbooks/ai_review.yml

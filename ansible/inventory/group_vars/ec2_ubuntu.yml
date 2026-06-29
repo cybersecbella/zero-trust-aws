@@ -1,0 +1,91 @@
+---
+# ansible/inventory/group_vars/ec2_ubuntu.yml
+#
+# Instance-level overrides for the ec2_ubuntu group.
+# These sit on top of group_vars/all.yml and are the right place for
+# anything that varies between your Ubuntu EC2 fleet and other targets.
+#
+# Values here override all.yml. Role-specific overrides (e.g. just for
+# bastion hosts) go in a separate group file, e.g. group_vars/role_bastion.yml,
+# which overrides this file in turn.
+
+# ── Connection ────────────────────────────────────────────────────────────────
+
+# Use SSM Session Manager instead of SSH — no port 22 required.
+# Requires: amazon.aws collection, SSM agent on instance,
+#           AmazonSSMManagedInstanceCore IAM policy on instance profile.
+ansible_connection: aws_ssm
+ansible_aws_ssm_region: "{{ lookup('env', 'AWS_DEFAULT_REGION') | default('us-east-1') }}"
+
+# Uncomment if you're using plain SSH instead of SSM:
+# ansible_connection: ssh
+# ansible_user: ubuntu
+# ansible_ssh_private_key_file: ~/.ssh/your-key.pem
+# ansible_ssh_common_args: "-o StrictHostKeyChecking=accept-new"
+
+# ── Python interpreter ────────────────────────────────────────────────────────
+
+ansible_python_interpreter: /usr/bin/python3
+
+# ── CIS role: Ubuntu 22-specific settings ────────────────────────────────────
+
+# The ansible-lockdown Ubuntu22-CIS role var names — confirm against
+# the role's defaults/main.yml for the version you pin in requirements.yml.
+
+# Filesystem: Ubuntu 22 AMIs don't ship cramfs or freevxfs kernel modules.
+# Attempting to disable them throws a benign but noisy error — skip cleanly.
+ubtu22cis_rule_1_1_1_1: false   # cramfs
+ubtu22cis_rule_1_1_1_2: false   # freevxfs
+
+# UFW: Ubuntu 22 uses UFW as the default firewall manager.
+# The CIS role will enable and configure it. If you manage iptables directly
+# or rely on Security Groups exclusively, set this to false and document why.
+ubtu22cis_firewall_package: ufw
+ubtu22cis_ufw_allow_out_ports:
+  - "80"
+  - "443"
+  - "123"   # NTP
+  - "53"    # DNS
+
+# Chrony vs systemd-timesyncd: Ubuntu 22 ships systemd-timesyncd by default.
+# CIS Level 2 wants chrony. The role will install it — leave this true.
+ubtu22cis_time_sync_tool: chrony
+
+# AIDE integrity checking: Level 2 requires it. The initial DB build is slow
+# (~5 min on a standard instance) and runs during the hardening play.
+# Set to false only in CI environments where you don't need the AIDE DB.
+ubtu22cis_config_aide: true
+ubtu22cis_aide_cron:
+  cron_user: root
+  cron_file: aide
+  aide_job: "/usr/bin/aide --check"
+  aide_minute: "0"
+  aide_hour:   "5"
+  aide_day:    "*"
+  aide_month:  "*"
+  aide_weekday: "*"
+
+# Audit daemon: ship auditd logs to CloudWatch via the unified agent.
+# Set the log group name to match your existing CW log group scheme.
+ubtu22cis_auditd_extra_conf:
+  log_format: ENRICHED
+
+# ── OpenSCAP scan settings ────────────────────────────────────────────────────
+
+# Used by scan_pre.yml and scan_post.yml
+oscap_oval_url: >-
+  https://security-metadata.canonical.com/oval/
+  com.ubuntu.jammy.usn.oval.xml.bz2
+oscap_content_path: /tmp/ubuntu22-oval.xml
+oscap_pre_results:  /tmp/oscap_pre_results.xml
+oscap_post_results: /tmp/oscap_post_results.xml
+oscap_pre_report:   /tmp/oscap_pre_report.html
+oscap_post_report:  /tmp/oscap_post_report.html
+
+# ── Tagging context for the AI reviewer ──────────────────────────────────────
+
+# These are passed to sg_diff.py so Claude has workload context when
+# reviewing changed Security Group rules. Keep in sync with your EC2 tags.
+instance_role:        "{{ lookup('aws_ssm', '/ec2/tags/Role',       default='unknown') }}"
+instance_environment: "{{ lookup('aws_ssm', '/ec2/tags/Environment',default='unknown') }}"
+instance_owner:       "{{ lookup('aws_ssm', '/ec2/tags/Owner',      default='unknown') }}"

@@ -1,0 +1,22 @@
+#Dynamic inventory (production) ─────────────────────────────────
+# Delete everything above and use a dynamic inventory plugin instead.
+#run:
+#   ansible-inventory -i inventory/aws_ec2.yml --list   # verify
+#   ansible-playbook -i inventory/aws_ec2.yml site.yml
+
+plugin: amazon.aws.aws_ec2
+ regions:
+   - us-east-1
+   - eu-west-1
+ filters:
+   instance-state-name: running
+   tag:OS: ubuntu22
+ keyed_groups:
+   - key: tags.Role
+     prefix: role
+   - key: tags.Environment
+     prefix: env
+ hostnames:
+   - private-ip-address          # use private IP (assumes Ansible runs inside VPC)
+ compose:
+   ansible_user: "'ubuntu'"
