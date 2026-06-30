@@ -191,10 +191,25 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # ── Optional Slack notification on findings ──────────────────────────────
+      # NOTE: GitHub Actions does not allow referencing `secrets` directly
+      # inside an `if:` condition (this is a hard restriction, not a syntax
+      # quirk — see https://github.com/actions/runner/issues/520). The
+      # workaround is to check for the secret's presence inside a `run:`
+      # step (where `secrets` IS accessible) and expose the result as a
+      # step output, then gate the next step on that output instead.
+      - name: Check Slack webhook configured
+        id: slack_check
+        run: |
+          if [[ -n "${{ secrets.SLACK_WEBHOOK }}" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Notify Slack on findings
         if: |
           steps.audit.outputs.status == 'findings' &&
-          secrets.SLACK_WEBHOOK != ''
+          steps.slack_check.outputs.configured == 'true'
         uses: slackapi/slack-github-action@v1.26.0
         with:
           payload: |
