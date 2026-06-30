@@ -70,7 +70,7 @@ jobs:
         run: |
           pytest auditor/tests/test_sg_auditor.py \
             -v --tb=short \
-            --cov=auditor/sg_auditor \
+            --cov=auditor \
             --cov-report=term-missing \
             --cov-fail-under=80
 
@@ -78,7 +78,7 @@ jobs:
         run: |
           pytest reviewer/tests/test_sg_diff.py \
             -v --tb=short \
-            --cov=reviewer/sg_diff \
+            --cov=reviewer \
             --cov-report=term-missing \
             --cov-fail-under=80
 

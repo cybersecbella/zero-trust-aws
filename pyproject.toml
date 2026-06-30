@@ -1,0 +1,30 @@
+# pyproject.toml
+#
+# Coverage and pytest configuration. Ensures consistent module resolution
+# regardless of the working directory pytest is invoked from (fixes
+# "0.00% coverage" issues seen in CI where rootdir detection differs
+# from local runs).
+
+[tool.coverage.run]
+relative_files = true
+source = ["auditor", "reviewer", "zeek", "gap_analyzer"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "auditor/tests",
+    "reviewer/tests",
+    "zeek/tests",
+    "gap_analyzer/tests",
+]
+addopts = "-ra"
