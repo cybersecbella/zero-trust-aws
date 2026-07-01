@@ -1,6 +1,6 @@
 # zero-trust-aws
 
-Walkthrough: https://www.cybersecbella.com/ 
+Walkthrough: https://www.cybersecbella.com/articles/zta_aws/
 
 A five-tool security automation toolkit that implements zero trust principles on AWS — from automated Security Group auditing to NIST SP 800-207 gap analysis.
 
