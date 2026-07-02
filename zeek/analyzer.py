@@ -256,7 +256,7 @@ def print_summary(findings: list[dict]) -> None:
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> argparse.Namespace: # pragma: no cover
     p = argparse.ArgumentParser(
         description="Zeek log analyser — lateral movement and data staging."
     )
@@ -279,7 +279,7 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> None:
+def main() -> None: # pragma: no cover
     args = parse_args()
 
     if args.verbose:
@@ -349,5 +349,5 @@ def main() -> None:
     sys.exit(1 if all_findings else 0)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     main()

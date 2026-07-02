@@ -448,7 +448,7 @@ def exit_code(result: ReviewResult, fail_on: str) -> int:
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> argparse.Namespace: # pragma: no cover
     p = argparse.ArgumentParser(
         description="AI-assisted Security Group rule reviewer."
     )
@@ -477,7 +477,7 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> None:
+def main() -> None: # pragma: no cover
     args = parse_args()
 
     if args.verbose:
@@ -530,5 +530,5 @@ def main() -> None:
     sys.exit(exit_code(result, args.fail_on))
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     main()

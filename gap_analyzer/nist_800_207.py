@@ -768,7 +768,7 @@ def resolve_api_key() -> str:
     return key
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> argparse.Namespace: # pragma: no cover
     p = argparse.ArgumentParser(
         description="NIST SP 800-207 Zero Trust gap analyzer for AWS."
     )
@@ -786,7 +786,7 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> None:
+def main() -> None: # pragma: no cover
     args = parse_args()
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
@@ -862,5 +862,5 @@ def main() -> None:
                  ts.weighted_score, ts.label)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     main()

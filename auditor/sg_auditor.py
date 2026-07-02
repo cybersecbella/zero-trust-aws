@@ -306,7 +306,7 @@ def post_to_security_hub(session: boto3.Session, region: str,
 
 # ── CLI entrypoint ────────────────────────────────────────────────────────────
 
-def parse_args() -> argparse.Namespace:
+def parse_args() -> argparse.Namespace: # pragma: no cover
     p = argparse.ArgumentParser(
         description="Audit AWS Security Groups for open internet ingress."
     )
@@ -326,7 +326,7 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> None:
+def main() -> None: # pragma: no cover
     args    = parse_args()
     session = boto3.Session(profile_name=args.profile)
 
@@ -384,5 +384,5 @@ def main() -> None:
     sys.exit(1 if all_raw else 0)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__": # pragma: no cover
     main()
