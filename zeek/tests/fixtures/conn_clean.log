@@ -1,0 +1,13 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	conn
+#open	2023-11-14-22-13-20
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	service	duration	orig_bytes	resp_bytes	conn_state	local_orig	local_resp	missed_bytes	history	orig_pkts	orig_ip_bytes	resp_pkts	resp_ip_bytes	tunnel_parents
+#types	time	string	addr	port	addr	port	enum	string	interval	count	count	string	bool	bool	count	string	count	count	count	count	set[string]
+1700000001.000000	Cclean001	10.0.1.5	57001	10.0.2.20	443	tcp	ssl	2.345678	204800	102400	SF	T	T	0	ShADadfF	20	205800	15	103000	-
+1700000002.000000	Cclean002	10.0.1.6	57002	10.0.2.21	443	tcp	ssl	1.987654	102400	51200	SF	T	T	0	ShADadfF	12	103000	8	51800	-
+1700000003.000000	Cclean003	10.0.1.7	57003	10.0.2.22	80	tcp	http	0.876543	51200	25600	SF	T	T	0	ShADadfF	6	51800	4	26000	-
+1700000004.000000	Cclean004	10.0.1.8	57004	10.0.2.23	443	tcp	ssl	3.112233	307200	153600	SF	T	T	0	ShADadfF	25	308000	18	154200	-
+#close	2023-11-14-22-13-24

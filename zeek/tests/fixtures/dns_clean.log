@@ -1,0 +1,13 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	dns
+#open	2023-11-14-22-13-20
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	trans_id	rtt	query	qclass	qclass_name	qtype	qtype_name	rcode	rcode_name	AA	TC	RD	RA	Z	answers	TTLs	rejected
+#types	time	string	addr	port	addr	port	enum	count	interval	string	count	string	count	string	count	string	bool	bool	bool	bool	count	vector[string]	vector[interval]	bool
+1700000001.000000	Dclean001	10.0.1.5	53001	10.0.0.1	53	udp	2001	0.012300	www.example.com	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	93.184.216.34	300	F
+1700000002.000000	Dclean002	10.0.1.5	53002	10.0.0.1	53	udp	2002	0.010100	api.github.com	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	140.82.121.5	60	F
+1700000003.000000	Dclean003	10.0.1.6	53003	10.0.0.1	53	udp	2003	0.011200	docs.aws.amazon.com	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	13.224.1.10	300	F
+1700000004.000000	Dclean004	10.0.1.7	53004	10.0.0.1	53	udp	2004	0.009800	registry.npmjs.org	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	104.16.1.1	300	F
+#close	2023-11-14-22-13-24
