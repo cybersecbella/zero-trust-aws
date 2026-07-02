@@ -322,7 +322,6 @@ def detect_nxdomain_storm(df: pd.DataFrame) -> list[dict]:
         }))
         .reset_index()
     )
-    per_host["nx_rate"] = per_host["nx_count"] / per_host["total"].clip(lower=1)
 
     # Minimum query volume to avoid flagging hosts with 1 NXDOMAIN
     MIN_QUERIES = 20

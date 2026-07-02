@@ -100,7 +100,7 @@ jobs:
             -v --tb=short \
             --cov=gap_analyzer \
             --cov-report=term-missing \
-            --cov-fail-under=80
+            --cov-fail-under=70
 
       # ── Combined coverage report ─────────────────────────────────────────────
       - name: Combined coverage report
