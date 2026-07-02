@@ -312,16 +312,16 @@ def detect_nxdomain_storm(df: pd.DataFrame) -> list[dict]:
     internal = df[df["id.orig_h"].apply(_is_private)].copy()
     if internal.empty:
         return findings
-
-    per_host = (
-        internal
+    
+    total_counts = internal.groupby("id.orig_h").size().rename("total")
+    nx_counts    = (
+        internal[internal[rcode_col] == nx_value]
         .groupby("id.orig_h")
-        .apply(lambda g: pd.Series({
-            "total":    len(g),
-            "nx_count": (g[rcode_col] == nx_value).sum(),
-        }))
-        .reset_index()
+        .size()
+        .rename("nx_count")
     )
+    per_host = pd.concat([total_counts, nx_counts], axis=1).fillna(0).reset_index()
+    per_host["nx_rate"] = per_host["nx_count"] / per_host["total"].clip(lower=1)
 
     # Minimum query volume to avoid flagging hosts with 1 NXDOMAIN
     MIN_QUERIES = 20
